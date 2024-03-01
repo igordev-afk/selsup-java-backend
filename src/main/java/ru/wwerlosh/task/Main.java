@@ -11,7 +11,7 @@ public class Main {
 
         DocumentDTO documentDTO = makeDocumentDTO();
         String signature = "98SajsISA9sa98";
-        CrptApi api = new CrptApi(5, Duration.ofSeconds(5));
+        CrptApi api = new CrptApi(5, Duration.ofSeconds(1));
 
         ExecutorService executor = Executors.newFixedThreadPool(10);
         for (int i = 0; i < 100; i++) {
@@ -21,8 +21,6 @@ public class Main {
                 throw new RuntimeException(e);
             }
             executor.execute(() -> api.createDocument(documentDTO, signature));
-
-//            api.createDocument(documentDTO, signature);
         }
 
         executor.shutdown();

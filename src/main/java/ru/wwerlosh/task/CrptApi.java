@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -30,29 +31,34 @@ public class CrptApi {
     private final ObjectSerializer documentSerializer;
 
     public CrptApi(int requestTime, Duration duration) {
-        this.crptApiHttpClient = new CrptApiHttpClient();
+
+        Objects.requireNonNull(duration, "Duration cannot be null");
+
+        if (requestTime <= 0) {
+            throw new IllegalArgumentException("Request time must be positive");
+        }
+
+        this.crptApiHttpClient = new CrptApiHttpClient("https://ismp.crpt.ru/api/v3/lk/documents/create");
         this.crptApiRateLimiter = new SemaphoreRateLimiter(requestTime, duration);
         this.documentSerializer = new DocumentSerializer();
     }
 
     public void createDocument(DocumentDTO document, String signature) {
-
         crptApiRateLimiter.acquire();
 
         String documentJson = documentSerializer.serialize(document);
         crptApiHttpClient.post(documentJson, signature);
-        System.out.println(documentJson);
     }
 }
 
 class CrptApiHttpClient {
 
     private final CloseableHttpClient httpClient;
-    private final String CREATE_DOCUMENT_URI;
+    private final String API_URI;
 
-    public CrptApiHttpClient() {
+    public CrptApiHttpClient(String URI) {
         this.httpClient = HttpClients.createDefault();
-        this.CREATE_DOCUMENT_URI = "https://ismp.crpt.ru/api/v3/lk/documents/create";
+        this.API_URI = URI;
     }
 
     public void post(String requestBody, String token) {
@@ -78,7 +84,7 @@ class CrptApiHttpClient {
     }
 
     private void setURI(HttpPost request) {
-        final URI uri = URI.create(CREATE_DOCUMENT_URI);
+        final URI uri = URI.create(API_URI);
         request.setURI(uri);
     }
 
@@ -116,13 +122,14 @@ class CrptApiHttpClient {
 class SemaphoreRateLimiter implements RateLimiter {
     private final Semaphore semaphore;
     private final ArrayBlockingQueue<Long> queue;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService scheduler;
     private final Duration refillPeriod;
 
     public SemaphoreRateLimiter(int capacity, Duration refillPeriod) {
-        this.refillPeriod = refillPeriod;
         this.semaphore = new Semaphore(capacity);
         this.queue = new ArrayBlockingQueue<>(capacity);
+        this.scheduler = Executors.newScheduledThreadPool(1);
+        this.refillPeriod = refillPeriod;
         initScheduler();
     }
 
@@ -142,14 +149,12 @@ class SemaphoreRateLimiter implements RateLimiter {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        long currentTime = System.currentTimeMillis();
-        queue.offer(currentTime);
+        queue.offer(System.currentTimeMillis());
     }
 
 }
 
 interface RateLimiter {
-
     void acquire();
 }
 
